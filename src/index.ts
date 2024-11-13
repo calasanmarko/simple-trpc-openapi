@@ -121,7 +121,7 @@ export const createTRPCOpenApiDoc = (opts: {
     }
 
     const spec = createDocument({
-        openapi: "3.0.0",
+        openapi: "3.0.3",
         info: opts.info,
         servers: [{ url: opts.url }],
         paths,

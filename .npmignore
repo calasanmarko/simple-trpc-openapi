@@ -1,0 +1,5 @@
+.gitignore
+.prettierrc
+eslint.config.js
+package-lock.json
+src/
