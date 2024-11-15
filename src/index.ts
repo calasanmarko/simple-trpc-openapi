@@ -220,7 +220,7 @@ export const preprocessFormData = <TShape extends z.ZodRawShape>(
         }
 
         if (schema._def.typeName === z.ZodFirstPartyTypeKind.ZodBoolean) {
-            return value === "true";
+            return value === "true" || value === true;
         }
 
         if (schema._def.typeName === z.ZodFirstPartyTypeKind.ZodArray) {
