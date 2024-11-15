@@ -9,7 +9,13 @@ import {
     type ZodOpenApiObject,
 } from "zod-openapi";
 import { fetchRequestHandler, type FetchHandlerRequestOptions } from "@trpc/server/adapters/fetch";
-import type { EncodingObject, OpenAPIObject } from "openapi3-ts/oas31";
+import {
+    isReferenceObject,
+    type EncodingObject,
+    type OpenAPIObject,
+    type ParameterObject,
+    type SchemaObject,
+} from "openapi3-ts/oas31";
 import { isZodType, processProcedureSchema, unwrap } from "./utility.js";
 
 export type TRPCOpenApiMethod = "get" | "post" | "put" | "delete";
@@ -154,6 +160,44 @@ export const createTRPCOpenApiDoc = (opts: {
         ],
     });
 
+    for (const path in spec.paths) {
+        const sanitizeSchema = (schema: SchemaObject, parameter?: ParameterObject) => {
+            if (Array.isArray(schema.type) && schema.type.includes("null")) {
+                const filteredTypes = schema.type.filter((type) => type !== "null");
+                schema.type = filteredTypes.length === 1 ? filteredTypes[0] : filteredTypes;
+
+                if (parameter) {
+                    parameter.required = false;
+                }
+            }
+        };
+
+        const pathSpec = spec.paths[path];
+
+        const getParameters = pathSpec.get?.parameters;
+        if (getParameters) {
+            for (const parameterKey in getParameters) {
+                const parameter = getParameters[parameterKey];
+                if (!isReferenceObject(parameter) && parameter.schema && !isReferenceObject(parameter.schema)) {
+                    sanitizeSchema(parameter.schema, parameter);
+                }
+            }
+        }
+
+        const requestBody = pathSpec.post?.requestBody;
+        if (requestBody && !isReferenceObject(requestBody) && requestBody.content) {
+            const multipartSchema = requestBody.content["multipart/form-data"]?.schema;
+            if (multipartSchema && !isReferenceObject(multipartSchema) && multipartSchema.properties) {
+                for (const propertyKey in multipartSchema.properties) {
+                    const property = multipartSchema.properties[propertyKey];
+                    if (!isReferenceObject(property)) {
+                        sanitizeSchema(property);
+                    }
+                }
+            }
+        }
+    }
+
     return {
         spec,
         openApiToTRPCPaths,
@@ -167,6 +211,10 @@ export const preprocessFormData = <TShape extends z.ZodRawShape>(
     const data: Record<string, unknown> = {};
 
     const coerceFormValue = (key: string | undefined, value: unknown, schema: z.ZodTypeAny) => {
+        if (schema._def.typeName === z.ZodFirstPartyTypeKind.ZodObject) {
+            return typeof value === "string" ? JSON.parse(value) : value;
+        }
+
         if (schema._def.typeName === z.ZodFirstPartyTypeKind.ZodNumber) {
             return Number(value);
         }
