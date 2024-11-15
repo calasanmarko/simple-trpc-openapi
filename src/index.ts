@@ -9,14 +9,8 @@ import {
     type ZodOpenApiObject,
 } from "zod-openapi";
 import { fetchRequestHandler, type FetchHandlerRequestOptions } from "@trpc/server/adapters/fetch";
-import {
-    isReferenceObject,
-    type EncodingObject,
-    type OpenAPIObject,
-    type ParameterObject,
-    type SchemaObject,
-} from "openapi3-ts/oas31";
-import { isZodType, processProcedureSchema, unwrap } from "./utility.js";
+import type { EncodingObject, OpenAPIObject, ParameterObject, SchemaObject } from "openapi3-ts/oas31";
+import { isReferenceObject, isZodType, processProcedureSchema, unwrap } from "./utility.js";
 
 export type TRPCOpenApiMethod = "get" | "post" | "put" | "delete";
 
@@ -211,8 +205,10 @@ export const preprocessFormData = <TShape extends z.ZodRawShape>(
     const data: Record<string, unknown> = {};
 
     const coerceFormValue = (key: string | undefined, value: unknown, schema: z.ZodTypeAny) => {
-        if (schema._def.typeName === z.ZodFirstPartyTypeKind.ZodObject) {
-            return typeof value === "string" ? JSON.parse(value) : value;
+        if (typeof value === "string") {
+            try {
+                value = JSON.parse(value);
+            } catch {}
         }
 
         if (schema._def.typeName === z.ZodFirstPartyTypeKind.ZodNumber) {

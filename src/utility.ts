@@ -1,3 +1,4 @@
+import type { ReferenceObject } from "openapi3-ts/oas31";
 import { z } from "zod";
 
 export const getZodType = (type: z.ZodType | undefined) => {
@@ -9,6 +10,10 @@ export const isZodType = <T extends z.ZodType & { _def: { typeName: z.ZodFirstPa
     typeName: T["_def"]["typeName"]
 ): type is T => {
     return getZodType(type) === typeName;
+};
+
+export const isReferenceObject = (obj: object): obj is ReferenceObject => {
+    return "$ref" in obj;
 };
 
 export const processProcedureSchema = <T extends z.ZodType>(type: T | undefined) => {
