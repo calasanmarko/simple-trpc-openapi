@@ -9,7 +9,8 @@ import {
     type ZodOpenApiObject,
 } from "zod-openapi";
 import { fetchRequestHandler, type FetchHandlerRequestOptions } from "@trpc/server/adapters/fetch";
-import type { OpenAPIObject } from "openapi3-ts/oas31";
+import type { EncodingObject, OpenAPIObject } from "openapi3-ts/oas31";
+import { isZodType, processProcedureSchema, unwrap } from "./utility.js";
 
 export type TRPCOpenApiMethod = "get" | "post" | "put" | "delete";
 
@@ -28,18 +29,9 @@ export type SimpleTRPCOpenApiDoc = {
 type TRPCProcedureWithInput = AnyTRPCProcedure & {
     _def: AnyTRPCProcedure["_def"] & {
         meta?: TRPCOpenApiMeta;
-        inputs: (z.ZodTypeAny | undefined)[];
-        output: z.ZodTypeAny | undefined;
+        inputs: (z.ZodType | undefined)[];
+        output: z.ZodType | undefined;
     };
-};
-
-const processZodType = (type: z.ZodTypeAny | undefined) => {
-    switch (type?._def.typeName) {
-        case z.ZodFirstPartyTypeKind.ZodVoid:
-            return undefined;
-        default:
-            return type;
-    }
 };
 
 export const createTRPCOpenApiDoc = (opts: {
@@ -57,23 +49,18 @@ export const createTRPCOpenApiDoc = (opts: {
         if (!openapiMeta) {
             continue;
         }
-        const input = processZodType(procedure._def.inputs.at(0));
-        const output = processZodType(procedure._def.output);
+        const input = processProcedureSchema(procedure._def.inputs.at(0));
+        const output = processProcedureSchema(procedure._def.output);
 
-        const inputOpenApi = input?._def.zodOpenApi?.openapi as z.ZodTypeDef["openapi"] | undefined;
-        const outputOpenApi = output?._def.zodOpenApi?.openapi as z.ZodTypeDef["openapi"] | undefined;
-
-        const inputContentType = inputOpenApi?.contentMediaType ?? "application/json";
-        if (inputContentType === "multipart/form-data" && openapiMeta.method !== "post") {
-            throw new Error(`${name}: Multipart form data is only supported for POST requests`);
-        }
+        const inputOpenApi = input?._def.zodOpenApi?.openapi;
+        const outputOpenApi = output?._def.zodOpenApi?.openapi;
 
         if (input && inputOpenApi?.title) {
-            schemas[input._def.zodOpenApi.openapi.title] = input;
+            schemas[inputOpenApi.title] = input;
         }
 
         if (output && outputOpenApi?.title) {
-            schemas[output._def.zodOpenApi.openapi.title] = output;
+            schemas[outputOpenApi.title] = output;
         }
 
         const requestParams =
@@ -83,16 +70,42 @@ export const createTRPCOpenApiDoc = (opts: {
                   } satisfies ZodOpenApiParameters)
                 : undefined;
 
-        const requestBody =
-            openapiMeta.method !== "get"
-                ? ({
-                      content: {
-                          [inputOpenApi?.contentMediaType ?? "application/json"]: {
-                              ...(input ? { schema: input } : {}),
-                          },
-                      },
-                  } satisfies ZodOpenApiRequestBodyObject)
-                : undefined;
+        const requestBody: ZodOpenApiRequestBodyObject | undefined = (() => {
+            if (openapiMeta.method === "get") {
+                return undefined;
+            }
+
+            if (!input) {
+                return {
+                    content: { "application/json": {} },
+                };
+            }
+
+            const inputContentType = inputOpenApi?.contentMediaType ?? "application/json";
+            const unwrappedInput = unwrap(input);
+            const encoding =
+                isZodType<z.ZodObject<never>>(unwrappedInput, z.ZodFirstPartyTypeKind.ZodObject) &&
+                inputContentType === "multipart/form-data"
+                    ? Object.entries(unwrappedInput.shape).reduce((acc, [key, value]) => {
+                          const unwrappedSchema = unwrap(value as z.ZodType);
+                          if (isZodType<z.ZodArray<never, never>>(unwrappedSchema, z.ZodFirstPartyTypeKind.ZodArray)) {
+                              acc[key] = {
+                                  explode: true,
+                              };
+                          }
+                          return acc;
+                      }, {} as EncodingObject)
+                    : {};
+
+            return {
+                content: {
+                    [inputContentType]: {
+                        schema: input,
+                        encoding,
+                    },
+                },
+            };
+        })();
 
         const responses = output
             ? ({
@@ -121,7 +134,7 @@ export const createTRPCOpenApiDoc = (opts: {
     }
 
     const spec = createDocument({
-        openapi: "3.0.3",
+        openapi: "3.1.0",
         info: opts.info,
         servers: [{ url: opts.url }],
         paths,
@@ -152,20 +165,6 @@ export const preprocessFormData = <TShape extends z.ZodRawShape>(
     schema: z.ZodObject<TShape>
 ) => {
     const data: Record<string, unknown> = {};
-    const unwrap = (v: z.ZodTypeAny) => {
-        if (
-            v._def.typeName === z.ZodFirstPartyTypeKind.ZodOptional ||
-            v._def.typeName === z.ZodFirstPartyTypeKind.ZodNullable
-        ) {
-            return unwrap((v as z.ZodOptional<never> | z.ZodNullable<never>).unwrap());
-        }
-
-        if (v._def.typeName === z.ZodFirstPartyTypeKind.ZodEffects) {
-            return unwrap((v as z.ZodEffects<never, never>)._def.schema);
-        }
-
-        return v;
-    };
 
     const coerceFormValue = (key: string | undefined, value: unknown, schema: z.ZodTypeAny) => {
         if (schema._def.typeName === z.ZodFirstPartyTypeKind.ZodNumber) {
