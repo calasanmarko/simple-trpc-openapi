@@ -113,7 +113,11 @@ export const createTRPCOpenApiDoc = (opts: {
                       description: "Successful response",
                       content: {
                           "application/json": {
-                              schema: output,
+                              schema: z.object({
+                                  result: z.object({
+                                      data: output,
+                                  }),
+                              }),
                           },
                       },
                   },
