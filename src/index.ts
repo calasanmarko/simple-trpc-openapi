@@ -12,7 +12,7 @@ import { fetchRequestHandler, type FetchHandlerRequestOptions } from "@trpc/serv
 import type { EncodingObject, OpenAPIObject, ParameterObject, SchemaObject } from "openapi3-ts/oas31";
 import { isReferenceObject, isZodType, processProcedureSchema, unwrap } from "./utility.js";
 
-export type TRPCOpenApiMethod = "get" | "post" | "put" | "delete";
+export type TRPCOpenApiMethod = "get" | "post" | "put" | "patch" | "delete";
 
 export type TRPCOpenApiMeta = {
     openapi?: {
