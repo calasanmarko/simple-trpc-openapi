@@ -232,8 +232,12 @@ export const preprocessFormData = <TShape extends z.ZodRawShape>(
                 throw new Error(`Expected array for key ${key}`);
             }
 
-            data[key] ||= [];
-            (data[key] as unknown[]).push(coerceFormValue(key, value, unwrap(schema._def.type)));
+            if (Array.isArray(value)) {
+                data[key] = value;
+            } else {
+                data[key] ||= [];
+                (data[key] as unknown[]).push(coerceFormValue(key, value, unwrap(schema._def.type)));
+            }
 
             return data[key];
         }
