@@ -215,6 +215,10 @@ export const preprocessFormData = <TShape extends z.ZodRawShape>(
             } catch {}
         }
 
+        if (schema._def.typeName === z.ZodFirstPartyTypeKind.ZodString) {
+            return String(value);
+        }
+
         if (schema._def.typeName === z.ZodFirstPartyTypeKind.ZodNumber) {
             return Number(value);
         }
