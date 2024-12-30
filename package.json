@@ -1,13 +1,19 @@
 {
   "name": "simple-trpc-openapi",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "license": "MIT",
   "type": "module",
   "types": "dist/index.d.ts",
   "module": "dist/index.js",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc"
+    "check": "tsc --noEmit",
+    "build": "tsc",
+    "format:check": "prettier --check src/",
+    "format:fix": "prettier --write src/",
+    "lint:check": "eslint src/",
+    "check:all": "npm run check && npm run lint:check && npm run format:check",
+    "prepublishOnly": "npm run check:all && npm run build"
   },
   "peerDependencies": {
     "@trpc/client": "^11.0.0-rc.604",
